@@ -119,7 +119,7 @@ impl RecordBatchProjector {
     }
 
     /// Do projection with record batch
-    pub(crate) fn project_bacth(&self, batch: RecordBatch) -> Result<RecordBatch> {
+    pub(crate) fn project_batch(&self, batch: RecordBatch) -> Result<RecordBatch> {
         RecordBatch::try_new(
             self.projected_schema.clone(),
             self.project_column(batch.columns())?,
@@ -190,7 +190,7 @@ mod test {
             RecordBatchProjector::new(schema.clone(), &[1, 3], field_id_fetch_func, |_| true)
                 .unwrap();
 
-        assert!(projector.field_indices.len() == 2);
+        assert_eq!(projector.field_indices.len(), 2);
         assert_eq!(projector.field_indices[0], vec![0]);
         assert_eq!(projector.field_indices[1], vec![0, 1]);
 
@@ -209,7 +209,7 @@ mod test {
         ])) as ArrayRef;
         let batch = RecordBatch::try_new(schema, vec![int_array, struct_array]).unwrap();
 
-        let projected_batch = projector.project_bacth(batch).unwrap();
+        let projected_batch = projector.project_batch(batch).unwrap();
         assert_eq!(projected_batch.num_columns(), 2);
         let projected_int_array = projected_batch
             .column(0)

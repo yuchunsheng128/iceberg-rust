@@ -21,6 +21,7 @@
 
 mod catalog;
 mod client;
+mod middleware;
 mod types;
 
 pub use catalog::*;
