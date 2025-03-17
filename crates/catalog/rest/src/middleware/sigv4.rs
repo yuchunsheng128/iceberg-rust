@@ -20,10 +20,10 @@
 use std::time::SystemTime;
 
 use anyhow::anyhow;
+use aws_config::sts::AssumeRoleProvider;
 use aws_config::{BehaviorVersion, Region};
-use aws_credential_types::provider::ProvideCredentials;
+use aws_credential_types::provider::{ProvideCredentials, SharedCredentialsProvider};
 use aws_credential_types::Credentials;
-use aws_sdk_sts::config::Builder as StsConfigBuilder;
 use aws_sigv4::http_request::{sign, SignableBody, SignableRequest, SigningSettings};
 use aws_sigv4::sign::v4;
 use http::Extensions;
@@ -35,7 +35,7 @@ use uuid::Uuid;
 pub(crate) struct SigV4Middleware {
     catalog_uri: String,
     signing_name: String,
-    signing_region: Option<String>,
+    signing_region: String,
 
     access_key_id: Option<String>,
     secret_access_key: Option<String>,
@@ -50,7 +50,7 @@ impl SigV4Middleware {
         Self {
             catalog_uri: catalog_uri.to_string(),
             signing_name: signing_name.to_string(),
-            signing_region: signing_region.map(|s| s.to_string()),
+            signing_region: signing_region.unwrap_or("us-east-1").to_string(),
             access_key_id: None,
             secret_access_key: None,
             session_token: None,
@@ -106,14 +106,54 @@ impl Middleware for SigV4Middleware {
         let config = self
             .config
             .get_or_init(|| async {
-                let mut config_loader = aws_config::defaults(BehaviorVersion::v2025_01_17());
-                if let Some(signing_region) = signing_region {
-                    config_loader = config_loader.region(Region::new(signing_region));
-                }
-                if let (Some(access_key_id), Some(secret_access_key)) =
+                let mut config_builder = aws_config::defaults(BehaviorVersion::v2025_01_17());
+
+                let region = Region::new(signing_region);
+                config_builder = config_builder.region(region.clone());
+
+                // Set up the credential provider based on configuration
+                if let Some(role_arn) = &self.role_arn {
+                    // Get the role session name or generate one
+                    let role_session_name = self
+                        .role_session_name
+                        .clone()
+                        .unwrap_or_else(|| format!("iceberg-rest-{}", Uuid::new_v4()));
+
+                    // Configure AssumeRoleProvider
+                    let assume_role_builder = AssumeRoleProvider::builder(role_arn)
+                        .session_name(role_session_name)
+                        .region(region);
+
+                    // If explicit credentials provided, use them for the base provider
+                    let assume_role_provider =
+                        if let (Some(access_key_id), Some(secret_access_key)) =
+                            (&self.access_key_id, &self.secret_access_key)
+                        {
+                            // Create static credentials to use for role assumption
+                            let credentials = Credentials::new(
+                                access_key_id,
+                                secret_access_key,
+                                self.session_token.clone(),
+                                None,
+                                "iceberg-rest-catalog",
+                            );
+
+                            // Create a credentials provider from the static credentials
+                            let static_provider = SharedCredentialsProvider::new(credentials);
+                            assume_role_builder
+                                .build_from_provider(static_provider)
+                                .await
+                        } else {
+                            // Otherwise, use the default credentials chain
+                            assume_role_builder.build().await
+                        };
+
+                    config_builder = config_builder.credentials_provider(assume_role_provider);
+                } else if let (Some(access_key_id), Some(secret_access_key)) =
                     (&self.access_key_id, &self.secret_access_key)
                 {
-                    config_loader = config_loader.credentials_provider(Credentials::new(
+                    // Use explicitly provided credentials without role assumption
+                    config_builder = config_builder.credentials_provider(Credentials::new(
                         access_key_id,
                         secret_access_key,
                         self.session_token.clone(),
@@ -121,7 +161,9 @@ impl Middleware for SigV4Middleware {
                         "iceberg-rest-catalog",
                     ));
                 }
-                config_loader.load().await
+
+                // Load the final config
+                config_builder.load().await
             })
             .await;
 
@@ -129,51 +171,11 @@ impl Middleware for SigV4Middleware {
             reqwest_middleware::Error::Middleware(anyhow!("No credentials provider found"))
         })?;
 
-        // If role_arn is provided, assume the role using STS
-        let credentials = if let Some(role_arn) = &self.role_arn {
-            let role_session_name = self.role_session_name.as_ref().ok_or_else(|| {
-                reqwest_middleware::Error::Middleware(anyhow!(
-                    "Role session name is required when assuming a role"
-                ))
-            })?;
-
-            // Create STS client
-            let sts_config = StsConfigBuilder::from(config).build();
-            let sts_client = aws_sdk_sts::Client::from_conf(sts_config);
-
-            // Assume the role
-            let assume_role_output = sts_client
-                .assume_role()
-                .role_arn(role_arn)
-                .role_session_name(role_session_name)
-                .send()
-                .await
-                .map_err(|e| reqwest_middleware::Error::Middleware(e.into()))?;
-
-            // Extract credentials from the response
-            let credentials_from_role = assume_role_output.credentials().ok_or_else(|| {
-                reqwest_middleware::Error::Middleware(anyhow!(
-                    "No credentials returned from assumed role"
-                ))
-            })?;
-
-            // Create AWS credentials from the assumed role
-            Credentials::new(
-                credentials_from_role.access_key_id(),
-                credentials_from_role.secret_access_key(),
-                Some(credentials_from_role.session_token().to_string()),
-                None,
-                "iceberg-rest-catalog-assumed-role",
-            )
-            .into()
-        } else {
-            // Use the default credentials
-            credential_provider
-                .provide_credentials()
-                .await
-                .map_err(|e| reqwest_middleware::Error::Middleware(e.into()))?
-                .into()
-        };
+        let credentials = credential_provider
+            .provide_credentials()
+            .await
+            .map_err(|e| reqwest_middleware::Error::Middleware(e.into()))?
+            .into();
 
         let region: &str = config.region().map(|r| r.as_ref()).unwrap_or("us-east-1");
 
