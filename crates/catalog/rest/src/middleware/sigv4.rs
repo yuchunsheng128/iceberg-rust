@@ -23,12 +23,14 @@ use anyhow::anyhow;
 use aws_config::{BehaviorVersion, Region};
 use aws_credential_types::provider::ProvideCredentials;
 use aws_credential_types::Credentials;
+use aws_sdk_sts::config::Builder as StsConfigBuilder;
 use aws_sigv4::http_request::{sign, SignableBody, SignableRequest, SigningSettings};
 use aws_sigv4::sign::v4;
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
 use tokio::sync::OnceCell;
+use uuid::Uuid;
 
 pub(crate) struct SigV4Middleware {
     catalog_uri: String,
@@ -38,6 +40,8 @@ pub(crate) struct SigV4Middleware {
     access_key_id: Option<String>,
     secret_access_key: Option<String>,
     session_token: Option<String>,
+    role_arn: Option<String>,
+    role_session_name: Option<String>,
     config: OnceCell<aws_config::SdkConfig>,
 }
 
@@ -50,6 +54,8 @@ impl SigV4Middleware {
             access_key_id: None,
             secret_access_key: None,
             session_token: None,
+            role_arn: None,
+            role_session_name: None,
             config: OnceCell::new(),
         }
     }
@@ -63,6 +69,22 @@ impl SigV4Middleware {
         self.access_key_id = Some(access_key_id);
         self.secret_access_key = Some(secret_access_key);
         self.session_token = session_token;
+        self
+    }
+
+    /// Configure the middleware to assume an IAM role.
+    ///
+    /// This will use AWS STS to assume the specified role before signing requests.
+    /// If no role_session_name is provided, a random UUID will be generated.
+    ///
+    /// # Arguments
+    ///
+    /// * `role_arn` - The ARN of the role to assume
+    /// * `role_session_name` - Optional session name to use when assuming the role
+    pub(crate) fn with_role(mut self, role_arn: String, role_session_name: Option<String>) -> Self {
+        self.role_arn = Some(role_arn);
+        self.role_session_name =
+            role_session_name.or_else(|| Some(format!("iceberg-rest-{}", Uuid::new_v4())));
         self
     }
 }
@@ -84,7 +106,7 @@ impl Middleware for SigV4Middleware {
         let config = self
             .config
             .get_or_init(|| async {
-                let mut config_loader = aws_config::defaults(BehaviorVersion::v2024_03_28());
+                let mut config_loader = aws_config::defaults(BehaviorVersion::v2025_01_17());
                 if let Some(signing_region) = signing_region {
                     config_loader = config_loader.region(Region::new(signing_region));
                 }
@@ -107,14 +129,55 @@ impl Middleware for SigV4Middleware {
             reqwest_middleware::Error::Middleware(anyhow!("No credentials provider found"))
         })?;
 
+        // If role_arn is provided, assume the role using STS
+        let credentials = if let Some(role_arn) = &self.role_arn {
+            let role_session_name = self.role_session_name.as_ref().ok_or_else(|| {
+                reqwest_middleware::Error::Middleware(anyhow!(
+                    "Role session name is required when assuming a role"
+                ))
+            })?;
+
+            // Create STS client
+            let sts_config = StsConfigBuilder::from(config).build();
+            let sts_client = aws_sdk_sts::Client::from_conf(sts_config);
+
+            // Assume the role
+            let assume_role_output = sts_client
+                .assume_role()
+                .role_arn(role_arn)
+                .role_session_name(role_session_name)
+                .send()
+                .await
+                .map_err(|e| reqwest_middleware::Error::Middleware(e.into()))?;
+
+            // Extract credentials from the response
+            let credentials_from_role = assume_role_output.credentials().ok_or_else(|| {
+                reqwest_middleware::Error::Middleware(anyhow!(
+                    "No credentials returned from assumed role"
+                ))
+            })?;
+
+            // Create AWS credentials from the assumed role
+            Credentials::new(
+                credentials_from_role.access_key_id(),
+                credentials_from_role.secret_access_key(),
+                Some(credentials_from_role.session_token().to_string()),
+                None,
+                "iceberg-rest-catalog-assumed-role",
+            )
+            .into()
+        } else {
+            // Use the default credentials
+            credential_provider
+                .provide_credentials()
+                .await
+                .map_err(|e| reqwest_middleware::Error::Middleware(e.into()))?
+                .into()
+        };
+
         let region: &str = config.region().map(|r| r.as_ref()).unwrap_or("us-east-1");
 
         // Prepare signing parameters
-        let credentials = credential_provider
-            .provide_credentials()
-            .await
-            .map_err(|e| reqwest_middleware::Error::Middleware(e.into()))?
-            .into();
         let signing_params = v4::SigningParams::builder()
             .identity(&credentials)
             .region(region)
@@ -351,6 +414,42 @@ mod tests {
         // Verify all mocks were called as expected
         mock_server.verify().await;
         unset_test_credentials();
+    }
+
+    #[tokio::test]
+    #[ignore] // This test requires AWS credentials and a valid role ARN
+    async fn test_sigv4_middleware_with_role() {
+        let _guard = TEST_MUTEX.lock();
+
+        // Start a mock server
+        let mock_server = MockServer::start().await;
+        let catalog_uri = mock_server.uri();
+
+        let role_arn =
+            std::env::var("ICEBERG_TEST_ROLE_ARN").expect("ICEBERG_TEST_ROLE_ARN is not set");
+
+        // Create middleware with role ARN
+        let middleware = SigV4Middleware::new(&catalog_uri, "glue", Some("ap-northeast-2"))
+            .with_role(role_arn.to_string(), Some("test-session-name".to_string()));
+
+        // Create a client with the middleware
+        let client = ClientBuilder::new(Client::new()).with(middleware).build();
+
+        // Set up mock to check for AWS auth header
+        Mock::given(method("GET"))
+            .and(path("/"))
+            .and(HeaderStartsWith("Authorization", "AWS4-HMAC-SHA256"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        // Make request (this will fail in CI without valid AWS credentials and role)
+        let resp = client.get(&catalog_uri).send().await;
+        assert!(resp.is_ok());
+
+        // Verify all mocks were called as expected
+        mock_server.verify().await;
     }
 
     struct HeaderMissing(&'static str);

@@ -78,6 +78,10 @@ impl HttpClient {
                 );
             }
 
+            if let Some(role_arn) = cfg.role_arn() {
+                sigv4_middleware = sigv4_middleware.with_role(role_arn, cfg.role_session_name());
+            }
+
             client_builder = client_builder.with(sigv4_middleware);
         }
 

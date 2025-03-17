@@ -246,6 +246,14 @@ impl RestCatalogConfig {
     pub(crate) fn session_token(&self) -> Option<String> {
         self.props.get("rest.session-token").cloned()
     }
+
+    pub(crate) fn role_arn(&self) -> Option<String> {
+        self.props.get("rest.role-arn").cloned()
+    }
+
+    pub(crate) fn role_session_name(&self) -> Option<String> {
+        self.props.get("rest.role-session-name").cloned()
+    }
 }
 
 #[derive(Debug)]
