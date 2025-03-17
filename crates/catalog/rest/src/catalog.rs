@@ -340,25 +340,42 @@ impl Catalog for RestCatalog {
         &self,
         parent: Option<&NamespaceIdent>,
     ) -> Result<Vec<NamespaceIdent>> {
-        let mut request = self.context().await?.client.request(
-            Method::GET,
-            self.context().await?.config.namespaces_endpoint(),
-        );
-        if let Some(ns) = parent {
-            request = request.query(&[("parent", ns.to_url_string())]);
+        let context = self.context().await?;
+        let endpoint = context.config.namespaces_endpoint();
+        let mut namespaces = Vec::new();
+        let mut next_token = None;
+
+        loop {
+            let mut request = context.client.request(Method::GET, endpoint.clone());
+
+            if let Some(ns) = parent {
+                request = request.query(&[("parent", ns.to_url_string())]);
+            }
+
+            if let Some(token) = next_token {
+                request = request.query(&[("pageToken", token)]);
+            }
+
+            let resp = context
+                .client
+                .query::<ListNamespaceResponse, ErrorResponse, OK>(request.build()?)
+                .await?;
+
+            let ns_identifiers = resp
+                .namespaces
+                .into_iter()
+                .map(NamespaceIdent::from_vec)
+                .collect::<Result<Vec<NamespaceIdent>>>()?;
+
+            namespaces.extend(ns_identifiers);
+
+            match resp.next_page_token {
+                Some(token) => next_token = Some(token),
+                None => break,
+            }
         }
 
-        let resp = self
-            .context()
-            .await?
-            .client
-            .query::<ListNamespaceResponse, ErrorResponse, OK>(request.build()?)
-            .await?;
-
-        resp.namespaces
-            .into_iter()
-            .map(NamespaceIdent::from_vec)
-            .collect::<Result<Vec<NamespaceIdent>>>()
+        Ok(namespaces)
     }
 
     /// Create a new namespace inside the catalog.
@@ -471,24 +488,32 @@ impl Catalog for RestCatalog {
 
     /// List tables from namespace.
     async fn list_tables(&self, namespace: &NamespaceIdent) -> Result<Vec<TableIdent>> {
-        let request = self
-            .context()
-            .await?
-            .client
-            .request(
-                Method::GET,
-                self.context().await?.config.tables_endpoint(namespace),
-            )
-            .build()?;
+        let context = self.context().await?;
+        let endpoint = context.config.tables_endpoint(namespace);
+        let mut identifiers = Vec::new();
+        let mut next_token = None;
 
-        let resp = self
-            .context()
-            .await?
-            .client
-            .query::<ListTableResponse, ErrorResponse, OK>(request)
-            .await?;
+        loop {
+            let mut request = context.client.request(Method::GET, endpoint.clone());
 
-        Ok(resp.identifiers)
+            if let Some(token) = next_token {
+                request = request.query(&[("pageToken", token)]);
+            }
+
+            let resp = context
+                .client
+                .query::<ListTableResponse, ErrorResponse, OK>(request.build()?)
+                .await?;
+
+            identifiers.extend(resp.identifiers);
+
+            match resp.next_page_token {
+                Some(token) => next_token = Some(token),
+                None => break,
+            }
+        }
+
+        Ok(identifiers)
     }
 
     /// Create a new table inside the namespace.
@@ -1047,6 +1072,166 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_list_namespace_with_pagination() {
+        let mut server = Server::new_async().await;
+
+        let config_mock = create_config_mock(&mut server).await;
+
+        let list_ns_mock_page1 = server
+            .mock("GET", "/v1/namespaces")
+            .with_body(
+                r#"{
+                "namespaces": [
+                    ["ns1", "ns11"],
+                    ["ns2"]
+                ],
+                "next-page-token": "token123"
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        let list_ns_mock_page2 = server
+            .mock("GET", "/v1/namespaces?pageToken=token123")
+            .with_body(
+                r#"{
+                "namespaces": [
+                    ["ns3"],
+                    ["ns4", "ns41"]
+                ]
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        let catalog = RestCatalog::new(RestCatalogConfig::builder().uri(server.url()).build());
+
+        let namespaces = catalog.list_namespaces(None).await.unwrap();
+
+        let expected_ns = vec![
+            NamespaceIdent::from_vec(vec!["ns1".to_string(), "ns11".to_string()]).unwrap(),
+            NamespaceIdent::from_vec(vec!["ns2".to_string()]).unwrap(),
+            NamespaceIdent::from_vec(vec!["ns3".to_string()]).unwrap(),
+            NamespaceIdent::from_vec(vec!["ns4".to_string(), "ns41".to_string()]).unwrap(),
+        ];
+
+        assert_eq!(expected_ns, namespaces);
+
+        config_mock.assert_async().await;
+        list_ns_mock_page1.assert_async().await;
+        list_ns_mock_page2.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_list_namespace_with_multiple_pages() {
+        let mut server = Server::new_async().await;
+
+        let config_mock = create_config_mock(&mut server).await;
+
+        // Page 1
+        let list_ns_mock_page1 = server
+            .mock("GET", "/v1/namespaces")
+            .with_body(
+                r#"{
+                "namespaces": [
+                    ["ns1", "ns11"],
+                    ["ns2"]
+                ],
+                "next-page-token": "page2"
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        // Page 2
+        let list_ns_mock_page2 = server
+            .mock("GET", "/v1/namespaces?pageToken=page2")
+            .with_body(
+                r#"{
+                "namespaces": [
+                    ["ns3"],
+                    ["ns4", "ns41"]
+                ],
+                "next-page-token": "page3"
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        // Page 3
+        let list_ns_mock_page3 = server
+            .mock("GET", "/v1/namespaces?pageToken=page3")
+            .with_body(
+                r#"{
+                "namespaces": [
+                    ["ns5", "ns51", "ns511"]
+                ],
+                "next-page-token": "page4"
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        // Page 4
+        let list_ns_mock_page4 = server
+            .mock("GET", "/v1/namespaces?pageToken=page4")
+            .with_body(
+                r#"{
+                "namespaces": [
+                    ["ns6"],
+                    ["ns7"]
+                ],
+                "next-page-token": "page5"
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        // Page 5 (final page)
+        let list_ns_mock_page5 = server
+            .mock("GET", "/v1/namespaces?pageToken=page5")
+            .with_body(
+                r#"{
+                "namespaces": [
+                    ["ns8", "ns81"]
+                ]
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        let catalog = RestCatalog::new(RestCatalogConfig::builder().uri(server.url()).build());
+
+        let namespaces = catalog.list_namespaces(None).await.unwrap();
+
+        let expected_ns = vec![
+            NamespaceIdent::from_vec(vec!["ns1".to_string(), "ns11".to_string()]).unwrap(),
+            NamespaceIdent::from_vec(vec!["ns2".to_string()]).unwrap(),
+            NamespaceIdent::from_vec(vec!["ns3".to_string()]).unwrap(),
+            NamespaceIdent::from_vec(vec!["ns4".to_string(), "ns41".to_string()]).unwrap(),
+            NamespaceIdent::from_vec(vec![
+                "ns5".to_string(),
+                "ns51".to_string(),
+                "ns511".to_string(),
+            ])
+            .unwrap(),
+            NamespaceIdent::from_vec(vec!["ns6".to_string()]).unwrap(),
+            NamespaceIdent::from_vec(vec!["ns7".to_string()]).unwrap(),
+            NamespaceIdent::from_vec(vec!["ns8".to_string(), "ns81".to_string()]).unwrap(),
+        ];
+
+        assert_eq!(expected_ns, namespaces);
+
+        // Verify all page requests were made
+        config_mock.assert_async().await;
+        list_ns_mock_page1.assert_async().await;
+        list_ns_mock_page2.assert_async().await;
+        list_ns_mock_page3.assert_async().await;
+        list_ns_mock_page4.assert_async().await;
+        list_ns_mock_page5.assert_async().await;
+    }
+
+    #[tokio::test]
     async fn test_create_namespace() {
         let mut server = Server::new_async().await;
 
@@ -1211,6 +1396,210 @@ mod tests {
 
         config_mock.assert_async().await;
         list_tables_mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_list_tables_with_pagination() {
+        let mut server = Server::new_async().await;
+
+        let config_mock = create_config_mock(&mut server).await;
+
+        let list_tables_mock_page1 = server
+            .mock("GET", "/v1/namespaces/ns1/tables")
+            .with_status(200)
+            .with_body(
+                r#"{
+                "identifiers": [
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table1"
+                    },
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table2"
+                    }
+                ],
+                "next-page-token": "token456"
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        let list_tables_mock_page2 = server
+            .mock("GET", "/v1/namespaces/ns1/tables?pageToken=token456")
+            .with_status(200)
+            .with_body(
+                r#"{
+                "identifiers": [
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table3"
+                    },
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table4"
+                    }
+                ]
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        let catalog = RestCatalog::new(RestCatalogConfig::builder().uri(server.url()).build());
+
+        let tables = catalog
+            .list_tables(&NamespaceIdent::new("ns1".to_string()))
+            .await
+            .unwrap();
+
+        let expected_tables = vec![
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table1".to_string()),
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table2".to_string()),
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table3".to_string()),
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table4".to_string()),
+        ];
+
+        assert_eq!(tables, expected_tables);
+
+        config_mock.assert_async().await;
+        list_tables_mock_page1.assert_async().await;
+        list_tables_mock_page2.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_list_tables_with_multiple_pages() {
+        let mut server = Server::new_async().await;
+
+        let config_mock = create_config_mock(&mut server).await;
+
+        // Page 1
+        let list_tables_mock_page1 = server
+            .mock("GET", "/v1/namespaces/ns1/tables")
+            .with_status(200)
+            .with_body(
+                r#"{
+                "identifiers": [
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table1"
+                    },
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table2"
+                    }
+                ],
+                "next-page-token": "page2"
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        // Page 2
+        let list_tables_mock_page2 = server
+            .mock("GET", "/v1/namespaces/ns1/tables?pageToken=page2")
+            .with_status(200)
+            .with_body(
+                r#"{
+                "identifiers": [
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table3"
+                    },
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table4"
+                    }
+                ],
+                "next-page-token": "page3"
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        // Page 3
+        let list_tables_mock_page3 = server
+            .mock("GET", "/v1/namespaces/ns1/tables?pageToken=page3")
+            .with_status(200)
+            .with_body(
+                r#"{
+                "identifiers": [
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table5"
+                    }
+                ],
+                "next-page-token": "page4"
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        // Page 4
+        let list_tables_mock_page4 = server
+            .mock("GET", "/v1/namespaces/ns1/tables?pageToken=page4")
+            .with_status(200)
+            .with_body(
+                r#"{
+                "identifiers": [
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table6"
+                    },
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table7"
+                    }
+                ],
+                "next-page-token": "page5"
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        // Page 5 (final page)
+        let list_tables_mock_page5 = server
+            .mock("GET", "/v1/namespaces/ns1/tables?pageToken=page5")
+            .with_status(200)
+            .with_body(
+                r#"{
+                "identifiers": [
+                    {
+                        "namespace": ["ns1"],
+                        "name": "table8"
+                    }
+                ]
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        let catalog = RestCatalog::new(RestCatalogConfig::builder().uri(server.url()).build());
+
+        let tables = catalog
+            .list_tables(&NamespaceIdent::new("ns1".to_string()))
+            .await
+            .unwrap();
+
+        let expected_tables = vec![
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table1".to_string()),
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table2".to_string()),
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table3".to_string()),
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table4".to_string()),
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table5".to_string()),
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table6".to_string()),
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table7".to_string()),
+            TableIdent::new(NamespaceIdent::new("ns1".to_string()), "table8".to_string()),
+        ];
+
+        assert_eq!(tables, expected_tables);
+
+        // Verify all page requests were made
+        config_mock.assert_async().await;
+        list_tables_mock_page1.assert_async().await;
+        list_tables_mock_page2.assert_async().await;
+        list_tables_mock_page3.assert_async().await;
+        list_tables_mock_page4.assert_async().await;
+        list_tables_mock_page5.assert_async().await;
     }
 
     #[tokio::test]
