@@ -248,11 +248,11 @@ impl RestCatalogConfig {
     }
 
     pub(crate) fn role_arn(&self) -> Option<String> {
-        self.props.get("rest.role-arn").cloned()
+        self.props.get("rest.assume-role.arn").cloned()
     }
 
     pub(crate) fn role_session_name(&self) -> Option<String> {
-        self.props.get("rest.role-session-name").cloned()
+        self.props.get("rest.assume-role.session-name").cloned()
     }
 }
 
