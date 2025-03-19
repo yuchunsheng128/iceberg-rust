@@ -67,7 +67,7 @@ impl ArrowReaderBuilder {
         let num_cpus = available_parallelism().get();
 
         ArrowReaderBuilder {
-            batch_size: None,
+            batch_size: Some(12 * 1024),
             file_io,
             concurrency_limit_data_files: num_cpus,
             row_group_filtering_enabled: true,
