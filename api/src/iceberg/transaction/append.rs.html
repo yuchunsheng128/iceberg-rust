@@ -1,4 +1,5 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/iceberg/src/transaction/append.rs`."><title>append.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="iceberg" data-themes="" data-resource-suffix="" data-rustdoc-version="1.81.0-nightly (a70b2ae57 2024-06-09)" data-channel="nightly" data-search-js="search-0fe7219eb170c82e.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/iceberg/src/transaction/append.rs`."><title>append.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-42caa33d.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="iceberg" data-themes="" data-resource-suffix="" data-rustdoc-version="1.84.0-nightly (b19329a37 2024-11-21)" data-channel="nightly" data-search-js="search-92e6798f.js" data-settings-js="settings-0f613d39.js" ><script src="../../../static.files/storage-59e33391.js"></script><script defer src="../../../static.files/src-script-56102188.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">iceberg/transaction/</div>append.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -371,7 +372,18 @@
 <a href="#371" id="371">371</a>
 <a href="#372" id="372">372</a>
 <a href="#373" id="373">373</a>
-</pre></div><pre class="rust"><code><span class="comment">// Licensed to the Apache Software Foundation (ASF) under one
+<a href="#374" id="374">374</a>
+<a href="#375" id="375">375</a>
+<a href="#376" id="376">376</a>
+<a href="#377" id="377">377</a>
+<a href="#378" id="378">378</a>
+<a href="#379" id="379">379</a>
+<a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+<a href="#383" id="383">383</a>
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a></pre></div><pre class="rust"><code><span class="comment">// Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
 // regarding copyright ownership.  The ASF licenses this file
@@ -446,12 +458,17 @@
     }
 
     <span class="doccomment">/// Adds existing parquet files
+    ///
+    /// Note: This API is not yet fully supported in version 0.5.0.  
+    /// It is currently incomplete and should not be used in production.
+    /// Specifically, schema compatibility checks and support for adding to partitioned tables
+    /// have not yet been implemented.
     </span><span class="attr">#[allow(dead_code)]
     </span><span class="kw">async fn </span>add_parquet_files(<span class="kw-2">mut </span><span class="self">self</span>, file_path: Vec&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Transaction&lt;<span class="lifetime">'a</span>&gt;&gt; {
         <span class="kw">if </span>!<span class="self">self
             </span>.snapshot_produce_action
             .tx
-            .table
+            .current_table
             .metadata()
             .default_spec
             .is_unpartitioned()
@@ -462,10 +479,10 @@
             ));
         }
 
-        <span class="kw">let </span>table_metadata = <span class="self">self</span>.snapshot_produce_action.tx.table.metadata();
+        <span class="kw">let </span>table_metadata = <span class="self">self</span>.snapshot_produce_action.tx.current_table.metadata();
 
         <span class="kw">let </span>data_files = ParquetWriter::parquet_files_to_data_files(
-            <span class="self">self</span>.snapshot_produce_action.tx.table.file_io(),
+            <span class="self">self</span>.snapshot_produce_action.tx.current_table.file_io(),
             file_path,
             table_metadata,
         )
@@ -490,7 +507,7 @@
             <span class="kw">let </span><span class="kw-2">mut </span>manifest_stream = <span class="self">self
                 </span>.snapshot_produce_action
                 .tx
-                .table
+                .current_table
                 .inspect()
                 .manifests()
                 .scan()
@@ -552,14 +569,19 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         snapshot_produce: <span class="kw-2">&amp;</span>SnapshotProduceAction&lt;<span class="lifetime">'_</span>&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;ManifestFile&gt;&gt; {
-        <span class="kw">let </span><span class="prelude-val">Some</span>(snapshot) = snapshot_produce.tx.table.metadata().current_snapshot() <span class="kw">else </span>{
+        <span class="kw">let </span><span class="prelude-val">Some</span>(snapshot) = snapshot_produce
+            .tx
+            .current_table
+            .metadata()
+            .current_snapshot()
+        <span class="kw">else </span>{
             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[]);
         };
 
         <span class="kw">let </span>manifest_list = snapshot
             .load_manifest_list(
-                snapshot_produce.tx.table.file_io(),
-                <span class="kw-2">&amp;</span>snapshot_produce.tx.table.metadata_ref(),
+                snapshot_produce.tx.current_table.file_io(),
+                <span class="kw-2">&amp;</span>snapshot_produce.tx.current_table.metadata_ref(),
             )
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
@@ -595,6 +617,7 @@
             .file_format(DataFileFormat::Parquet)
             .file_size_in_bytes(<span class="number">100</span>)
             .record_count(<span class="number">1</span>)
+            .partition_spec_id(table.metadata().default_partition_spec_id())
             .partition(Struct::from_iter([<span class="prelude-val">Some</span>(Literal::string(<span class="string">"test"</span>))]))
             .build()
             .unwrap();
@@ -606,6 +629,7 @@
             .file_format(DataFileFormat::Parquet)
             .file_size_in_bytes(<span class="number">100</span>)
             .record_count(<span class="number">1</span>)
+            .partition_spec_id(table.metadata().default_partition_spec_id())
             .partition(Struct::from_iter([<span class="prelude-val">Some</span>(Literal::long(<span class="number">300</span>))]))
             .build()
             .unwrap();
@@ -619,11 +643,11 @@
         <span class="macro">assert_eq!</span>(
             <span class="macro">vec!</span>[
                 TableRequirement::UuidMatch {
-                    uuid: tx.table.metadata().uuid()
+                    uuid: table.metadata().uuid()
                 },
                 TableRequirement::RefSnapshotIdMatch {
                     r#ref: MAIN_BRANCH.to_string(),
-                    snapshot_id: tx.table.metadata().current_snapshot_id
+                    snapshot_id: table.metadata().current_snapshot_id
                 }
             ],
             tx.requirements
