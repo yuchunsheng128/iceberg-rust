@@ -44,6 +44,7 @@ impl<'a> MetadataTable<'a> {
     }
 }
 
+#[allow(missing_docs)]
 #[cfg(test)]
 pub mod tests {
     use expect_test::Expect;
