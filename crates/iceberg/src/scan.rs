@@ -950,6 +950,7 @@ impl FileScanTask {
     }
 }
 
+#[allow(missing_docs)]
 #[cfg(test)]
 pub mod tests {
     use std::collections::HashMap;
@@ -980,12 +981,15 @@ pub mod tests {
     use crate::table::Table;
     use crate::TableIdent;
 
+    #[allow(missing_docs)]
     pub struct TableTestFixture {
         table_location: String,
+        #[allow(missing_docs)]
         pub table: Table,
     }
 
     impl TableTestFixture {
+        #[allow(missing_docs)]
         #[allow(clippy::new_without_default)]
         pub fn new() -> Self {
             let tmp_dir = TempDir::new().unwrap();
@@ -1040,6 +1044,7 @@ pub mod tests {
                 .unwrap()
         }
 
+        #[allow(missing_docs)]
         pub async fn setup_manifest_files(&mut self) {
             let current_snapshot = self.table.metadata().current_snapshot().unwrap();
             let parent_snapshot = current_snapshot
@@ -1227,9 +1232,10 @@ pub mod tests {
             let values: BooleanArray = values.into();
             let col8 = Arc::new(values) as ArrayRef;
 
-            let to_write = RecordBatch::try_new(schema.clone(), vec![
-                col1, col2, col3, col4, col5, col6, col7, col8,
-            ])
+            let to_write = RecordBatch::try_new(
+                schema.clone(),
+                vec![col1, col2, col3, col4, col5, col6, col7, col8],
+            )
             .unwrap();
 
             // Write the Parquet files
