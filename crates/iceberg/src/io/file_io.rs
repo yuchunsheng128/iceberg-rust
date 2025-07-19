@@ -166,6 +166,31 @@ impl FileIO {
     }
 }
 
+/// Container for storing type-safe extensions used to configure underlying FileIO behavior.
+#[derive(Clone, Debug, Default)]
+pub struct Extensions(HashMap<TypeId, Arc<dyn Any + Send + Sync>>);
+
+impl Extensions {
+    /// Add an extension.
+    pub fn add<T: Any + Send + Sync>(&mut self, ext: T) {
+        self.0.insert(TypeId::of::<T>(), Arc::new(ext));
+    }
+
+    /// Extends the current set of extensions with another set of extensions.
+    pub fn extend(&mut self, extensions: Extensions) {
+        self.0.extend(extensions.0);
+    }
+
+    /// Fetch an extension.
+    pub fn get<T>(&self) -> Option<Arc<T>>
+    where T: 'static + Send + Sync + Clone {
+        let type_id = TypeId::of::<T>();
+        self.0
+            .get(&type_id)
+            .and_then(|arc_any| Arc::clone(arc_any).downcast::<T>().ok())
+    }
+}
+
 /// Builder for [`FileIO`].
 #[derive(Clone, Debug)]
 pub struct FileIOBuilder {
@@ -176,7 +201,7 @@ pub struct FileIOBuilder {
     /// Arguments for operator.
     props: HashMap<String, String>,
     /// Optional extensions to configure the underlying FileIO behavior.
-    extensions: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
+    extensions: Extensions,
 }
 
 impl FileIOBuilder {
@@ -186,7 +211,7 @@ impl FileIOBuilder {
         Self {
             scheme_str: Some(scheme_str.to_string()),
             props: HashMap::default(),
-            extensions: HashMap::default(),
+            extensions: Extensions::default(),
         }
     }
 
@@ -195,15 +220,19 @@ impl FileIOBuilder {
         Self {
             scheme_str: None,
             props: HashMap::default(),
-            extensions: HashMap::default(),
+            extensions: Extensions::default(),
         }
     }
 
     /// Fetch the scheme string.
     ///
     /// The scheme_str will be empty if it's None.
-    pub fn into_parts(self) -> (String, HashMap<String, String>) {
-        (self.scheme_str.unwrap_or_default(), self.props)
+    pub fn into_parts(self) -> (String, HashMap<String, String>, Extensions) {
+        (
+            self.scheme_str.unwrap_or_default(),
+            self.props,
+            self.extensions,
+        )
     }
 
     /// Add argument for operator.
@@ -224,15 +253,12 @@ impl FileIOBuilder {
 
     /// Add an extension to the file IO builder.
     pub fn with_extension<T: Any + Send + Sync>(mut self, ext: T) -> Self {
-        self.extensions.insert(TypeId::of::<T>(), Arc::new(ext));
+        self.extensions.add(ext);
         self
     }
 
     /// Adds multiple extensions to the file IO builder.
-    pub fn with_extensions(
-        mut self,
-        extensions: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
-    ) -> Self {
+    pub fn with_extensions(mut self, extensions: Extensions) -> Self {
         self.extensions.extend(extensions);
         self
     }
@@ -240,10 +266,7 @@ impl FileIOBuilder {
     /// Fetch an extension from the file IO builder.
     pub fn extension<T>(&self) -> Option<Arc<T>>
     where T: 'static + Send + Sync + Clone {
-        let type_id = TypeId::of::<T>();
-        self.extensions
-            .get(&type_id)
-            .and_then(|arc_any| Arc::clone(arc_any).downcast::<T>().ok())
+        self.extensions.get::<T>()
     }
 
     /// Builds [`FileIO`].
