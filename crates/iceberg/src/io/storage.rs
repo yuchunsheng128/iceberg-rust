@@ -27,6 +27,8 @@ use opendal::services::S3Config;
 use opendal::{Operator, Scheme};
 
 use super::FileIOBuilder;
+#[cfg(feature = "storage-s3")]
+use crate::io::CustomAwsCredentialLoader;
 use crate::{Error, ErrorKind};
 
 /// The storage carries all supported storage services in iceberg
@@ -42,6 +44,7 @@ pub(crate) enum Storage {
         /// Storing the scheme string here to return the correct path.
         scheme_str: String,
         config: Arc<S3Config>,
+        customized_credential_load: Option<CustomAwsCredentialLoader>,
     },
     #[cfg(feature = "storage-oss")]
     Oss { config: Arc<OssConfig> },
@@ -52,6 +55,9 @@ pub(crate) enum Storage {
 impl Storage {
     /// Convert iceberg config to opendal config.
     pub(crate) fn build(file_io_builder: FileIOBuilder) -> crate::Result<Self> {
+        let aws_customized_credential_load = file_io_builder
+            .extension::<CustomAwsCredentialLoader>()
+            .map(Arc::unwrap_or_clone);
         let (scheme_str, props) = file_io_builder.into_parts();
         let scheme = Self::parse_scheme(&scheme_str)?;
 
@@ -64,6 +70,7 @@ impl Storage {
             Scheme::S3 => Ok(Self::S3 {
                 scheme_str,
                 config: super::s3_config_parse(props)?.into(),
+                customized_credential_load: aws_customized_credential_load,
             }),
             #[cfg(feature = "storage-gcs")]
             Scheme::Gcs => Ok(Self::Gcs {
@@ -118,8 +125,12 @@ impl Storage {
                 }
             }
             #[cfg(feature = "storage-s3")]
-            Storage::S3 { scheme_str, config } => {
-                let op = super::s3_config_build(config, path)?;
+            Storage::S3 {
+                scheme_str,
+                config,
+                customized_credential_load,
+            } => {
+                let op = super::s3_config_build(config, customized_credential_load, path)?;
                 let op_info = op.info();
 
                 // Check prefix of s3 path.

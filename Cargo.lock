@@ -3529,6 +3529,7 @@ dependencies = [
  "parquet",
  "pretty_assertions",
  "rand 0.8.5",
+ "reqsign",
  "reqwest",
  "reqwest-middleware",
  "roaring",
@@ -5370,16 +5371,6 @@ checksum = "5a651516ddc9168ebd67b24afd085a718be02f8858fe406591b013d101ce2f40"
 
 [[package]]
 name = "quick-xml"
-version = "0.35.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86e446ed58cef1bbfe847bc2fda0e2e4ea9f0e57b90c507d4781292590d72a4e"
-dependencies = [
- "memchr",
- "serde",
-]
-
-[[package]]
-name = "quick-xml"
 version = "0.36.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7649a7b4df05aed9ea7ec6f628c67c9953a43869b8bc50929569b2999d443fe"
@@ -5677,9 +5668,9 @@ checksum = "a35e8a6bf28cd121053a66aa2e6a2e3eaffad4a60012179f0e864aa5ffeff215"
 
 [[package]]
 name = "reqsign"
-version = "0.16.1"
+version = "0.16.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb0075a66c8bfbf4cc8b70dca166e722e1f55a3ea9250ecbb85f4d92a5f64149"
+checksum = "43451dbf3590a7590684c25fb8d12ecdcc90ed3ac123433e500447c7d77ed701"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5695,7 +5686,7 @@ dependencies = [
  "log",
  "once_cell",
  "percent-encoding",
- "quick-xml 0.35.0",
+ "quick-xml 0.37.4",
  "rand 0.8.5",
  "reqwest",
  "rsa",
@@ -5704,6 +5695,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2",
+ "tokio",
 ]
 
 [[package]]
