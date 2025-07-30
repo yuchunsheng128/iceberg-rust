@@ -60,6 +60,9 @@ pub enum ErrorKind {
     ///
     /// This error is returned when given iceberg feature is not supported.
     FeatureUnsupported,
+
+    /// An invalid argument was provided to an iceberg function.
+    InvalidArgument,
 }
 
 impl ErrorKind {
@@ -80,6 +83,7 @@ impl From<ErrorKind> for &'static str {
             ErrorKind::NamespaceAlreadyExists => "NamespaceAlreadyExists",
             ErrorKind::NamespaceNotFound => "NamespaceNotFound",
             ErrorKind::PreconditionFailed => "PreconditionFailed",
+            ErrorKind::InvalidArgument => "InvalidArgument",
         }
     }
 }

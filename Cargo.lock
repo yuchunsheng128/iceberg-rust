@@ -3582,13 +3582,13 @@ name = "iceberg-catalog-hadoop"
 version = "0.5.1"
 dependencies = [
  "anyhow",
+ "arrow",
+ "arrow-array",
  "async-trait",
- "ctor",
  "futures",
  "iceberg",
- "iceberg_test_utils",
+ "insta",
  "opendal",
- "port_scanner",
  "serde_json",
  "tokio",
  "tracing",
@@ -3991,6 +3991,17 @@ checksum = "a0c10553d664a4d0bcff9f4215d0aac67a639cc68ef660840afe309b807bc9f5"
 dependencies = [
  "block-padding",
  "generic-array",
+]
+
+[[package]]
+name = "insta"
+version = "1.43.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "154934ea70c58054b556dd430b99a98c2a7ff5309ac9891597e339b5c28f4371"
+dependencies = [
+ "console",
+ "once_cell",
+ "similar",
 ]
 
 [[package]]

@@ -41,6 +41,6 @@ typed-builder = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-ctor = { workspace = true }
-iceberg_test_utils = { path = "../../test_utils", features = ["tests"] }
-port_scanner = { workspace = true }
+arrow = { version = "55", features = ["prettyprint"] }
+arrow-array = { workspace = true }
+insta = { version = "1.43" }
