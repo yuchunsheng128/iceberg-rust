@@ -51,16 +51,6 @@ impl HadoopCatalog {
 #[async_trait]
 impl Catalog for HadoopCatalog {
     // Unsupported operations in Hadoop Catalog
-    async fn list_namespaces(
-        &self,
-        _parent: Option<&NamespaceIdent>,
-    ) -> Result<Vec<NamespaceIdent>> {
-        Err(Error::new(
-            ErrorKind::FeatureUnsupported,
-            "Listing namespaces is not supported in hadoop catalog",
-        ))
-    }
-
     async fn create_namespace(
         &self,
         _namespace: &NamespaceIdent,
@@ -69,20 +59,6 @@ impl Catalog for HadoopCatalog {
         Err(Error::new(
             ErrorKind::FeatureUnsupported,
             "Creating namespaces is not supported in hadoop catalog",
-        ))
-    }
-
-    async fn get_namespace(&self, _namespace: &NamespaceIdent) -> Result<Namespace> {
-        Err(Error::new(
-            ErrorKind::FeatureUnsupported,
-            "Getting namespaces is not supported in hadoop catalog",
-        ))
-    }
-
-    async fn namespace_exists(&self, _namespace: &NamespaceIdent) -> Result<bool> {
-        Err(Error::new(
-            ErrorKind::FeatureUnsupported,
-            "Checking namespace existence is not supported in hadoop catalog",
         ))
     }
 
@@ -137,6 +113,30 @@ impl Catalog for HadoopCatalog {
     }
 
     // Supported operations in Hadoop Catalog
+    async fn list_namespaces(
+        &self,
+        _parent: Option<&NamespaceIdent>,
+    ) -> Result<Vec<NamespaceIdent>> {
+        Err(Error::new(
+            ErrorKind::FeatureUnsupported,
+            "Not implemented yet",
+        ))
+    }
+
+    async fn namespace_exists(&self, _namespace: &NamespaceIdent) -> Result<bool> {
+        Err(Error::new(
+            ErrorKind::FeatureUnsupported,
+            "Not implemented yet",
+        ))
+    }
+
+    async fn get_namespace(&self, _namespace: &NamespaceIdent) -> Result<Namespace> {
+        Err(Error::new(
+            ErrorKind::FeatureUnsupported,
+            "Not implemented yet",
+        ))
+    }
+
     async fn load_table(&self, _table_identifier: &TableIdent) -> Result<Table> {
         Err(Error::new(
             ErrorKind::FeatureUnsupported,
