@@ -28,14 +28,12 @@ async fn get_hadoop_catalog() -> HadoopCatalog {
     let cargo_manifest_dir = env!("CARGO_MANIFEST_DIR");
     let test_data_path = format!("file://{}/testdata/hadoop_warehouse", cargo_manifest_dir);
     // let catalog = HadoopCatalog::new(test_data_path, file_io);
-    let catalog = HadoopCatalogBuilder::default()
+    HadoopCatalogBuilder::default()
         .with_file_io(file_io)
         .with_warehouse_root(test_data_path)
         .build()
         .await
-        .expect("Should build HadoopCatalog");
-
-    catalog
+        .expect("Should build HadoopCatalog")
 }
 
 mod tests {
@@ -76,7 +74,7 @@ mod tests {
         // List tables in the nested namespace
         let mut tables = catalog
             .list_tables(
-                &iceberg::NamespaceIdent::from_strs(&["nested", "test"])
+                &iceberg::NamespaceIdent::from_strs(["nested", "test"])
                     .expect("Should create namespace"),
             )
             .await
@@ -112,18 +110,18 @@ mod tests {
             namespaces
         );
 
-        namespaces.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+        namespaces.sort_by_key(|ns| ns.to_string());
 
         assert!(
             namespaces[0].to_string() == "nested",
             "The namespace should be 'nested', found: {}",
-            namespaces[0].to_string()
+            namespaces[0]
         );
 
         assert!(
             namespaces[1].to_string() == "test",
             "The namespace should be 'test', found: {}",
-            namespaces[1].to_string()
+            namespaces[1]
         );
 
         // List namespaces in the nested namespace
@@ -141,7 +139,7 @@ mod tests {
         assert!(
             nested_namespaces[0].to_string() == "nested.test",
             "The nested namespace should be 'nested.test', found: {}",
-            nested_namespaces[0].to_string()
+            nested_namespaces[0]
         );
     }
 
@@ -171,7 +169,7 @@ mod tests {
         // Check a nested namespace
         let nested_exists = catalog
             .namespace_exists(
-                &iceberg::NamespaceIdent::from_strs(&["nested", "test"])
+                &iceberg::NamespaceIdent::from_strs(["nested", "test"])
                     .expect("Should create nested namespace"),
             )
             .await
@@ -198,7 +196,7 @@ mod tests {
         // Check if a nested table exists
         let exists = catalog
             .table_exists(&iceberg::TableIdent::new(
-                iceberg::NamespaceIdent::from_strs(&["nested", "test"])
+                iceberg::NamespaceIdent::from_strs(["nested", "test"])
                     .expect("Should create nested namespace"),
                 "my_table_3".to_string(),
             ))
@@ -328,7 +326,7 @@ mod tests {
         {
             let table = catalog
                 .load_table(&iceberg::TableIdent::new(
-                    iceberg::NamespaceIdent::from_strs(&["nested", "test"])
+                    iceberg::NamespaceIdent::from_strs(["nested", "test"])
                         .expect("Should create nested namespace"),
                     "my_table_3".to_string(),
                 ))

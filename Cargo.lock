@@ -3581,7 +3581,6 @@ dependencies = [
 name = "iceberg-catalog-hadoop"
 version = "0.5.1"
 dependencies = [
- "anyhow",
  "arrow",
  "arrow-array",
  "async-trait",
@@ -3592,8 +3591,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "typed-builder 0.20.1",
- "uuid",
 ]
 
 [[package]]

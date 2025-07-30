@@ -29,7 +29,6 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-anyhow = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
 iceberg = { workspace = true }
@@ -37,8 +36,6 @@ opendal = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-typed-builder = { workspace = true }
-uuid = { workspace = true }
 
 [dev-dependencies]
 arrow = { version = "55", features = ["prettyprint"] }

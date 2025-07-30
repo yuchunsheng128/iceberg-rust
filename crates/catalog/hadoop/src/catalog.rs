@@ -101,8 +101,8 @@ impl HadoopCatalogBuilder {
             ));
         }
 
-        if !warehouse_root.ends_with("/") {
-            warehouse_root.push_str("/");
+        if !warehouse_root.ends_with('/') {
+            warehouse_root.push('/');
         }
 
         Ok(HadoopCatalog {
@@ -250,7 +250,7 @@ impl Catalog for HadoopCatalog {
     async fn load_table(&self, table_identifier: &TableIdent) -> Result<Table> {
         if !self.table_exists(table_identifier).await? {
             if let MetadataMode::Exact(ref metadata_file) = self.metadata_mode {
-                let input_file = self.file_io.new_input(&metadata_file)?;
+                let input_file = self.file_io.new_input(metadata_file)?;
                 if !input_file.exists().await? {
                     return Err(Error::new(
                         ErrorKind::DataInvalid,
@@ -459,7 +459,7 @@ impl HadoopCatalog {
         let input_data = self.file_io.new_input(&data_dir)?;
         return Ok(input_data.exists().await?
             && matches!(input_data.metadata().await?.mode, EntryMode::DIR)
-            && self.directory_has_metadata(&path, metadata_mode).await?);
+            && self.directory_has_metadata(path, metadata_mode).await?);
     }
 
     async fn directory_exists(&self, path: &str) -> Result<bool> {
