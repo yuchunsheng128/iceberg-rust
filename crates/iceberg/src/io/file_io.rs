@@ -21,7 +21,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use opendal::Operator;
+use opendal::{Lister, Operator};
 use url::Url;
 
 use super::storage::Storage;
@@ -163,6 +163,21 @@ impl FileIO {
             path,
             relative_path_pos,
         })
+    }
+
+    /// Returns the scheme string used to construct absolute paths for this `FileIO`
+    pub fn scheme(&self) -> &str {
+        self.inner.scheme()
+    }
+
+    /// Returns a `Operator::lister` for the given path.
+    ///
+    /// # Errors
+    ///
+    /// If the operator fails to create a lister for the given path or `FileIO`
+    pub async fn lister(&self, path: impl AsRef<str>) -> Result<Lister> {
+        let (op, root_uri) = self.inner.create_operator(&path)?;
+        Ok(op.lister(root_uri).await?)
     }
 }
 

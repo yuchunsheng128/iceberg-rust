@@ -202,4 +202,19 @@ impl Storage {
             s => Ok(s.parse::<Scheme>()?),
         }
     }
+
+    pub fn scheme(&self) -> &str {
+        match self {
+            #[cfg(feature = "storage-memory")]
+            Storage::Memory(_) => "memory",
+            #[cfg(feature = "storage-fs")]
+            Storage::LocalFs => "file",
+            #[cfg(feature = "storage-s3")]
+            Storage::S3 { .. } => "s3",
+            #[cfg(feature = "storage-gcs")]
+            Storage::Gcs { .. } => "gcs",
+            #[cfg(feature = "storage-oss")]
+            Storage::Oss { .. } => "oss",
+        }
+    }
 }
