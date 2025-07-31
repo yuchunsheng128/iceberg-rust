@@ -21,7 +21,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use opendal::{Lister, Operator};
+use opendal::{EntryMode, Lister, Operator};
 use url::Url;
 
 use super::storage::Storage;
@@ -165,11 +165,6 @@ impl FileIO {
         })
     }
 
-    /// Returns the scheme string used to construct absolute paths for this `FileIO`
-    pub fn scheme(&self) -> &str {
-        self.inner.scheme()
-    }
-
     /// Returns a `Operator::lister` for the given path.
     ///
     /// # Errors
@@ -300,6 +295,8 @@ impl FileIOBuilder {
 pub struct FileMetadata {
     /// The size of the file.
     pub size: u64,
+    /// The file mode.
+    pub mode: EntryMode,
 }
 
 /// Trait for reading file.
@@ -350,6 +347,7 @@ impl InputFile {
 
         Ok(FileMetadata {
             size: meta.content_length(),
+            mode: meta.mode(),
         })
     }
 
