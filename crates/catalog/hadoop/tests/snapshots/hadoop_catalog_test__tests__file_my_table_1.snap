@@ -1,11 +1,10 @@
 ---
 source: crates/catalog/hadoop/tests/hadoop_catalog_test.rs
-assertion_line: 253
 expression: snapshot_content
 ---
 +----+------+
 | id | name |
 +----+------+
-| 3  | foo  |
-| 4  | bar  |
+| 1  | foo  |
+| 2  | bar  |
 +----+------+

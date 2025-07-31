@@ -31,9 +31,10 @@ use iceberg::{
 use opendal::{Entry, EntryMode};
 
 /// Specifies the mode for identifying metadata files in a Hadoop catalog
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum MetadataMode {
     /// Infer the latest metadata file from the Hadoop structure
+    #[default]
     Infer,
     /// Use the exact metadata file specified, or infer it if the file does not exist
     ExactOrInfer(String),
@@ -46,19 +47,33 @@ pub enum MetadataMode {
 pub struct HadoopCatalogBuilder {
     warehouse_root: Option<String>,
     file_io: Option<FileIO>,
+    metadata_mode: MetadataMode,
+    properties: HashMap<String, String>,
 }
 
 impl HadoopCatalogBuilder {
     /// Sets the warehouse root for the Hadoop catalog.
     /// The warehouse root should be the absolute path to the warehouse directory, including the scheme prefix for the FileIO.
-    pub fn with_warehouse_root(mut self, warehouse_root: String) -> Self {
-        self.warehouse_root = Some(warehouse_root);
+    pub fn with_warehouse_root(mut self, warehouse_root: impl Into<String>) -> Self {
+        self.warehouse_root = Some(warehouse_root.into());
         self
     }
 
     /// Sets the FileIO instance for the Hadoop catalog.
     pub fn with_file_io(mut self, file_io: FileIO) -> Self {
         self.file_io = Some(file_io);
+        self
+    }
+
+    /// Sets the metadata mode for the Hadoop catalog.
+    pub fn with_metadata_mode(mut self, metadata_mode: MetadataMode) -> Self {
+        self.metadata_mode = metadata_mode;
+        self
+    }
+
+    /// Sets a property for the FileIO connection.
+    pub fn set_property(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.properties.insert(key.into(), value.into());
         self
     }
 
@@ -76,9 +91,13 @@ impl HadoopCatalogBuilder {
             )
         })?;
 
-        let file_io = self
-            .file_io
-            .ok_or_else(|| Error::new(ErrorKind::InvalidArgument, "FileIO must be specified"))?;
+        let file_io = if let Some(file_io) = self.file_io {
+            file_io
+        } else {
+            FileIO::from_path(&warehouse_root)?
+                .with_props(self.properties)
+                .build()?
+        };
 
         let root_input = file_io.new_input(&warehouse_root).map_err(|e| {
             Error::new(
@@ -91,13 +110,6 @@ impl HadoopCatalogBuilder {
             return Err(Error::new(
                 ErrorKind::InvalidArgument,
                 "Warehouse root must be a directory",
-            ));
-        }
-
-        if !warehouse_root.starts_with(file_io.scheme()) {
-            return Err(Error::new(
-                ErrorKind::InvalidArgument,
-                "Warehouse root must start with the FileIO scheme prefix",
             ));
         }
 
@@ -290,6 +302,8 @@ impl Catalog for HadoopCatalog {
                 namespace = table_identifier.namespace.join("/"),
                 table = table_identifier.name
             );
+
+            println!("Metadata version hint path: {version_hint_path}");
 
             let input = self.file_io.new_input(&version_hint_path)?;
             if input.exists().await? {

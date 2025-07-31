@@ -40,4 +40,6 @@ tracing = { workspace = true }
 [dev-dependencies]
 arrow = { version = "55", features = ["prettyprint"] }
 arrow-array = { workspace = true }
+ctor = { workspace = true }
+iceberg_test_utils = { path = "../../test_utils", features = ["tests"] }
 insta = { version = "1.43" }

@@ -165,11 +165,6 @@ impl FileIO {
         })
     }
 
-    /// Returns the scheme string used to construct absolute paths for this `FileIO`
-    pub fn scheme(&self) -> &str {
-        self.inner.scheme()
-    }
-
     /// Returns a `Operator::lister` for the given path.
     ///
     /// # Errors
