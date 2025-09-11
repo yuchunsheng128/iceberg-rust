@@ -451,7 +451,9 @@ impl FieldMatchMode {
             FieldMatchMode::Id => get_field_id(arrow_field)
                 .map(|id| id == iceberg_field.id)
                 .unwrap_or(false),
-            FieldMatchMode::Name => arrow_field.name() == &iceberg_field.name,
+            FieldMatchMode::Name => {
+                arrow_field.name().to_lowercase() == iceberg_field.name.to_lowercase()
+            }
         }
     }
 }
