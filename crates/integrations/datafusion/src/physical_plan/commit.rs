@@ -41,7 +41,7 @@ use crate::to_datafusion_error;
 /// IcebergCommitExec is responsible for collecting the files written and use
 /// [`Transaction::fast_append`] to commit the data files written.
 #[derive(Debug)]
-pub(crate) struct IcebergCommitExec {
+pub struct IcebergCommitExec {
     table: Table,
     catalog: Arc<dyn Catalog>,
     input: Arc<dyn ExecutionPlan>,
