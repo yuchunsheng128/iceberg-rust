@@ -15,11 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Iceberg memory Catalog API implementation.
-
-#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
+pub const ICEBERG_PLAYGROUND_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 mod catalog;
-mod namespace_state;
-
 pub use catalog::*;

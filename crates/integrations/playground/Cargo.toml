@@ -20,7 +20,7 @@ description = "Apache iceberg client"
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
-name = "iceberg-cli"
+name = "iceberg-playground"
 readme = "README.md"
 repository.workspace = true
 rust-version.workspace = true
@@ -33,6 +33,7 @@ datafusion = { workspace = true }
 datafusion-cli = { workspace = true }
 dirs = { workspace = true }
 fs-err = { workspace = true }
+iceberg = { workspace = true }
 iceberg-catalog-rest = { workspace = true }
 iceberg-datafusion = { workspace = true }
 mimalloc = { workspace = true }

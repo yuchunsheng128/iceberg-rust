@@ -22,11 +22,11 @@
 //! 2. IcebergWriter: writer for logical format provided by iceberg table (Such as data file, equality delete file, position delete file)
 //!    or other function (Such as partition writer, delta writer).
 //!
-//! The IcebergWriter will use FileWriter to write underly physical file.
+//! The IcebergWriter will use the inner FileWriter to write physical files.
 //!
-//! We hope the writer interface can be extensible and flexible. Each writer can be create config independently
-//! and combined together to build a writer which have complex write logic. E.g. combine `FanoutPartitionWriter`, `DataFileWriter`, `ParquetWriter` to get
-//! a writer can split the data automatelly according to partition and write down as parquet physical format.
+//! The writer interface is designed to be extensible and flexible. Writers can be independently configured
+//! and composed to support complex write logic. E.g. By combining `FanoutPartitionWriter`, `DataFileWriter`, and `ParquetWriter`,
+//! you can build a writer that automatically partitions the data and writes it in the Parquet format.
 //!
 //! For this purpose, there are four trait corresponding to these writer:
 //! - IcebergWriterBuilder
@@ -34,13 +34,13 @@
 //! - FileWriterBuilder
 //! - FileWriter
 //!
-//! User can create specific writer builder, combine them and build the writer finally. Also user can custom
-//! own writer and implement writer trait for them so that the custom writer can integrate with existing writer. (See following example)
+//! Users can create specific writer builders, combine them, and build the final writer.
+//! They can also define custom writers by implementing the `Writer` trait,
+//! allowing seamless integration with existing writers. (See the example below.)
 //!
 //! # Simple example for the data file writer used parquet physical format:
-//! ```rust, ignore
-//! // This example uses `iceberg_catalog_memory`, which isn't enabled by default.
-//! // To run this, add `iceberg-catalog-memory` as a dependency in your Cargo.toml.
+//! ```rust, no_run
+//! use std::collections::HashMap;
 //! use std::sync::Arc;
 //!
 //! use arrow_array::{ArrayRef, BooleanArray, Int32Array, RecordBatch, StringArray};
@@ -54,15 +54,23 @@
 //!     DefaultFileNameGenerator, DefaultLocationGenerator,
 //! };
 //! use iceberg::writer::{IcebergWriter, IcebergWriterBuilder};
-//! use iceberg::{Catalog, Result, TableIdent};
-//! use iceberg_catalog_memory::MemoryCatalog;
+//! use iceberg::{Catalog, CatalogBuilder, MemoryCatalog, Result, TableIdent};
 //! use parquet::file::properties::WriterProperties;
 //! #[tokio::main]
 //! async fn main() -> Result<()> {
-//!     // Build your file IO.
-//!     let file_io = FileIOBuilder::new("memory").build()?;
 //!     // Connect to a catalog.
-//!     let catalog = MemoryCatalog::new(file_io, None);
+//!     use iceberg::memory::{MEMORY_CATALOG_WAREHOUSE, MemoryCatalogBuilder};
+//!     let catalog = MemoryCatalogBuilder::default()
+//!         .load(
+//!             "memory",
+//!             HashMap::from([(
+//!                 MEMORY_CATALOG_WAREHOUSE.to_string(),
+//!                 "file:///path/to/warehouse".to_string(),
+//!             )]),
+//!         )
+//!         .await?;
+//!     // Add customized code to create a table first.
+//!
 //!     // Load table from catalog.
 //!     let table = catalog
 //!         .load_table(&TableIdent::from_strs(["hello", "world"])?)
@@ -78,6 +86,7 @@
 //!     let parquet_writer_builder = ParquetWriterBuilder::new(
 //!         WriterProperties::default(),
 //!         table.metadata().current_schema().clone(),
+//!         None,
 //!         table.file_io().clone(),
 //!         location_generator.clone(),
 //!         file_name_generator.clone(),
@@ -97,13 +106,13 @@
 //! ```
 //!
 //! # Custom writer to record latency
-//! ```rust, ignore
-//! // This example uses `iceberg_catalog_memory`, which isn't enabled by default.
-//! // To run this, add `iceberg-catalog-memory` as a dependency in your Cargo.toml.
+//! ```rust, no_run
+//! use std::collections::HashMap;
 //! use std::time::Instant;
 //!
 //! use arrow_array::RecordBatch;
 //! use iceberg::io::FileIOBuilder;
+//! use iceberg::memory::MemoryCatalogBuilder;
 //! use iceberg::spec::DataFile;
 //! use iceberg::writer::base_writer::data_file_writer::DataFileWriterBuilder;
 //! use iceberg::writer::file_writer::ParquetWriterBuilder;
@@ -111,8 +120,7 @@
 //!     DefaultFileNameGenerator, DefaultLocationGenerator,
 //! };
 //! use iceberg::writer::{IcebergWriter, IcebergWriterBuilder};
-//! use iceberg::{Catalog, Result, TableIdent};
-//! use iceberg_catalog_memory::MemoryCatalog;
+//! use iceberg::{Catalog, CatalogBuilder, MemoryCatalog, Result, TableIdent};
 //! use parquet::file::properties::WriterProperties;
 //!
 //! #[derive(Clone)]
@@ -163,14 +171,31 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<()> {
-//!     // Build your file IO.
-//!     let file_io = FileIOBuilder::new("memory").build()?;
 //!     // Connect to a catalog.
-//!     let catalog = MemoryCatalog::new(file_io, None);
+//!     use iceberg::memory::MEMORY_CATALOG_WAREHOUSE;
+//!     use iceberg::spec::{Literal, PartitionKey, Struct};
+//!
+//!     let catalog = MemoryCatalogBuilder::default()
+//!         .load(
+//!             "memory",
+//!             HashMap::from([(
+//!                 MEMORY_CATALOG_WAREHOUSE.to_string(),
+//!                 "file:///path/to/warehouse".to_string(),
+//!             )]),
+//!         )
+//!         .await?;
+//!
+//!     // Add customized code to create a table first.
+//!
 //!     // Load table from catalog.
 //!     let table = catalog
 //!         .load_table(&TableIdent::from_strs(["hello", "world"])?)
 //!         .await?;
+//!     let partition_key = PartitionKey::new(
+//!         table.metadata().default_partition_spec().as_ref().clone(),
+//!         table.metadata().current_schema().clone(),
+//!         Struct::from_iter(vec![Some(Literal::string("Seattle"))]),
+//!     );
 //!     let location_generator = DefaultLocationGenerator::new(table.metadata().clone()).unwrap();
 //!     let file_name_generator = DefaultFileNameGenerator::new(
 //!         "test".to_string(),
@@ -182,6 +207,7 @@
 //!     let parquet_writer_builder = ParquetWriterBuilder::new(
 //!         WriterProperties::default(),
 //!         table.metadata().current_schema().clone(),
+//!         Some(partition_key),
 //!         table.file_io().clone(),
 //!         location_generator.clone(),
 //!         file_name_generator.clone(),
@@ -231,8 +257,8 @@ pub trait IcebergWriter<I = DefaultInput, O = DefaultOutput>: Send + 'static {
     async fn close(&mut self) -> Result<O>;
 }
 
-/// The current file status of iceberg writer. It implement for the writer which write a single
-/// file.
+/// The current file status of the Iceberg writer.
+/// This is implemented for writers that write a single file at a time.
 pub trait CurrentFileStatus {
     /// Get the current file path.
     fn current_file_path(&self) -> String;
@@ -253,7 +279,7 @@ mod tests {
     use crate::io::FileIO;
     use crate::spec::{DataFile, DataFileFormat};
 
-    // This function is used to guarantee the trait can be used as a object safe trait.
+    // This function is used to guarantee the trait can be used as an object safe trait.
     async fn _guarantee_object_safe(mut w: Box<dyn IcebergWriter>) {
         let _ = w
             .write(RecordBatch::new_empty(Schema::empty().into()))

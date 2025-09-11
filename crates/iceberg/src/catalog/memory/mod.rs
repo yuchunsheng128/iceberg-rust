@@ -15,8 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#![doc = include_str!("../README.md")]
-pub const ICEBERG_CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+//! Memory catalog implementation.
 
 mod catalog;
+mod namespace_state;
+
 pub use catalog::*;

@@ -21,17 +21,19 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, BooleanArray, Int32Array, RecordBatch, StringArray};
 use futures::TryStreamExt;
-use iceberg::spec::{Literal, PrimitiveLiteral, Struct, Transform, UnboundPartitionSpec};
+use iceberg::spec::{
+    Literal, PartitionKey, PrimitiveLiteral, Struct, Transform, UnboundPartitionSpec,
+};
 use iceberg::table::Table;
-use iceberg::transaction::Transaction;
+use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::writer::base_writer::data_file_writer::DataFileWriterBuilder;
 use iceberg::writer::file_writer::ParquetWriterBuilder;
 use iceberg::writer::file_writer::location_generator::{
     DefaultFileNameGenerator, DefaultLocationGenerator,
 };
 use iceberg::writer::{IcebergWriter, IcebergWriterBuilder};
-use iceberg::{Catalog, TableCreation};
-use iceberg_catalog_rest::RestCatalog;
+use iceberg::{Catalog, CatalogBuilder, TableCreation};
+use iceberg_catalog_rest::RestCatalogBuilder;
 use parquet::file::properties::WriterProperties;
 
 use crate::get_shared_containers;
@@ -40,7 +42,10 @@ use crate::shared_tests::{random_ns, test_schema};
 #[tokio::test]
 async fn test_append_partition_data_file() {
     let fixture = get_shared_containers();
-    let rest_catalog = RestCatalog::new(fixture.catalog_config.clone());
+    let rest_catalog = RestCatalogBuilder::default()
+        .load("rest", fixture.catalog_config.clone())
+        .await
+        .unwrap();
     let ns = random_ns().await;
     let schema = test_schema();
 
@@ -56,7 +61,7 @@ async fn test_append_partition_data_file() {
     let table_creation = TableCreation::builder()
         .name("t1".to_string())
         .schema(schema.clone())
-        .partition_spec(partition_spec)
+        .partition_spec(partition_spec.clone())
         .build();
 
     let table = rest_catalog
@@ -75,6 +80,11 @@ async fn test_append_partition_data_file() {
     );
 
     let first_partition_id_value = 100;
+    let partition_key = PartitionKey::new(
+        partition_spec.clone(),
+        table.metadata().current_schema().clone(),
+        Struct::from_iter(vec![Some(Literal::int(first_partition_id_value))]),
+    );
 
     let location_generator = DefaultLocationGenerator::new(table.metadata().clone()).unwrap();
     let file_name_generator = DefaultFileNameGenerator::new(
@@ -86,6 +96,7 @@ async fn test_append_partition_data_file() {
     let parquet_writer_builder = ParquetWriterBuilder::new(
         WriterProperties::default(),
         table.metadata().current_schema().clone(),
+        Some(partition_key),
         table.file_io().clone(),
         location_generator.clone(),
         file_name_generator.clone(),
@@ -120,11 +131,8 @@ async fn test_append_partition_data_file() {
 
     // commit result
     let tx = Transaction::new(&table);
-    let mut append_action = tx.fast_append(None, vec![]).unwrap();
-    append_action
-        .add_data_files(data_file_valid.clone())
-        .unwrap();
-    let tx = append_action.apply().await.unwrap();
+    let append_action = tx.fast_append().add_data_files(data_file_valid.clone());
+    let tx = append_action.apply(tx).unwrap();
     let table = tx.commit(&rest_catalog).await.unwrap();
 
     // check result
@@ -144,6 +152,7 @@ async fn test_append_partition_data_file() {
         parquet_writer_builder.clone(),
         batch.clone(),
         table.clone(),
+        &rest_catalog,
     )
     .await;
 
@@ -151,6 +160,7 @@ async fn test_append_partition_data_file() {
         parquet_writer_builder,
         batch,
         table,
+        &rest_catalog,
         first_partition_id_value,
     )
     .await;
@@ -163,6 +173,7 @@ async fn test_schema_incompatible_partition_type(
     >,
     batch: RecordBatch,
     table: Table,
+    catalog: &dyn Catalog,
 ) {
     // test writing different "type" of partition than mentioned in schema
     let mut data_file_writer_invalid = DataFileWriterBuilder::new(
@@ -180,11 +191,10 @@ async fn test_schema_incompatible_partition_type(
     let data_file_invalid = data_file_writer_invalid.close().await.unwrap();
 
     let tx = Transaction::new(&table);
-    let mut append_action = tx.fast_append(None, vec![]).unwrap();
-    if append_action
-        .add_data_files(data_file_invalid.clone())
-        .is_ok()
-    {
+    let append_action = tx.fast_append().add_data_files(data_file_invalid.clone());
+    let tx = append_action.apply(tx).unwrap();
+
+    if tx.commit(catalog).await.is_ok() {
         panic!("diverging partition info should have returned error");
     }
 }
@@ -196,6 +206,7 @@ async fn test_schema_incompatible_partition_fields(
     >,
     batch: RecordBatch,
     table: Table,
+    catalog: &dyn Catalog,
     first_partition_id_value: i32,
 ) {
     // test writing different number of partition fields than mentioned in schema
@@ -220,11 +231,9 @@ async fn test_schema_incompatible_partition_fields(
     let data_file_invalid = data_file_writer_invalid.close().await.unwrap();
 
     let tx = Transaction::new(&table);
-    let mut append_action = tx.fast_append(None, vec![]).unwrap();
-    if append_action
-        .add_data_files(data_file_invalid.clone())
-        .is_ok()
-    {
+    let append_action = tx.fast_append().add_data_files(data_file_invalid.clone());
+    let tx = append_action.apply(tx).unwrap();
+    if tx.commit(catalog).await.is_ok() {
         panic!("passing different number of partition fields should have returned error");
     }
 }
