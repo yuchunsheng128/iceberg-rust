@@ -24,9 +24,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::SchemaRef as ArrowSchemaRef;
 use datafusion::catalog::Session;
-use datafusion::common::DataFusionError;
 use datafusion::datasource::{TableProvider, TableType};
 use datafusion::error::{DataFusionError, Result as DFResult};
+use datafusion::logical_expr::dml::InsertOp;
 use datafusion::logical_expr::{Expr, TableProviderFilterPushDown};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
@@ -35,6 +35,7 @@ use iceberg::inspect::MetadataTableType;
 use iceberg::table::Table;
 use iceberg::{Catalog, Error, ErrorKind, Result, TableIdent};
 
+use crate::metadata_table::IcebergMetadataTableProvider;
 use crate::physical_plan::commit::IcebergCommitExec;
 use crate::physical_plan::scan::IcebergTableScan;
 use crate::physical_plan::write::IcebergWriteExec;
@@ -83,7 +84,6 @@ impl IcebergTableProvider {
         Ok(IcebergTableProvider {
             table,
             snapshot_id: None,
-            catalog: Some(client),
             schema,
             catalog: Some(client),
         })
@@ -96,7 +96,6 @@ impl IcebergTableProvider {
         Ok(IcebergTableProvider {
             table,
             snapshot_id: None,
-            catalog: None,
             schema,
             catalog: None,
         })
@@ -122,7 +121,6 @@ impl IcebergTableProvider {
         Ok(IcebergTableProvider {
             table,
             snapshot_id: Some(snapshot_id),
-            catalog: None,
             schema,
             catalog: None,
         })

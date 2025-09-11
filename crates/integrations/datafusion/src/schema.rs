@@ -24,6 +24,7 @@ use datafusion::catalog::SchemaProvider;
 use datafusion::datasource::TableProvider;
 use datafusion::error::{DataFusionError, Result as DFResult};
 use futures::future::try_join_all;
+use iceberg::inspect::MetadataTableType;
 use iceberg::{Catalog, NamespaceIdent, Result, TableIdent};
 
 use crate::table::IcebergTableProvider;

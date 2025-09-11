@@ -203,31 +203,6 @@ impl Extensions {
     }
 }
 
-/// Container for storing type-safe extensions used to configure underlying FileIO behavior.
-#[derive(Clone, Debug, Default)]
-pub struct Extensions(HashMap<TypeId, Arc<dyn Any + Send + Sync>>);
-
-impl Extensions {
-    /// Add an extension.
-    pub fn add<T: Any + Send + Sync>(&mut self, ext: T) {
-        self.0.insert(TypeId::of::<T>(), Arc::new(ext));
-    }
-
-    /// Extends the current set of extensions with another set of extensions.
-    pub fn extend(&mut self, extensions: Extensions) {
-        self.0.extend(extensions.0);
-    }
-
-    /// Fetch an extension.
-    pub fn get<T>(&self) -> Option<Arc<T>>
-    where T: 'static + Send + Sync + Clone {
-        let type_id = TypeId::of::<T>();
-        self.0
-            .get(&type_id)
-            .and_then(|arc_any| Arc::clone(arc_any).downcast::<T>().ok())
-    }
-}
-
 /// Builder for [`FileIO`].
 #[derive(Clone, Debug)]
 pub struct FileIOBuilder {
