@@ -139,7 +139,7 @@ impl TableProvider for IcebergTableProvider {
         _state: &dyn Session,
         projection: Option<&Vec<usize>>,
         filters: &[Expr],
-        _limit: Option<usize>,
+        limit: Option<usize>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
         // Get the latest table metadata from the catalog if it exists
         let table = if let Some(catalog) = &self.catalog {
@@ -158,6 +158,7 @@ impl TableProvider for IcebergTableProvider {
             self.schema.clone(),
             projection,
             filters,
+            limit,
         )))
     }
 
