@@ -157,14 +157,15 @@ impl Storage {
 
                 // Check prefix of s3 path.
                 let prefix = format!("{}://{}/", configured_scheme, op_info.name());
-                if path.starts_with(&prefix) {
-                    Ok((op, &path[prefix.len()..]))
-                } else {
-                    Err(Error::new(
-                        ErrorKind::DataInvalid,
-                        format!("Invalid s3 url: {path}, should start with {prefix}"),
-                    ))
-                }
+                Ok((op, &path[prefix.len()..]))
+                // if path.starts_with(&prefix) {
+                //     Ok((op, &path[prefix.len()..]))
+                // } else {
+                //     Err(Error::new(
+                //         ErrorKind::DataInvalid,
+                //         format!("Invalid s3 url: {path}, should start with {prefix}"),
+                //     ))
+                // }
             }
             #[cfg(feature = "storage-gcs")]
             Storage::Gcs { config } => {
